@@ -1,0 +1,23 @@
+# Secrets / local environment
+.env
+.env.*
+*.pem
+*.key
+
+# n8n local/runtime data
+.n8n/
+node_modules/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Large recordings
+*.mp4
+*.mov
+*.webm
+
+# Local exports that may contain credentials
+*-private.json
+*-secrets.json
