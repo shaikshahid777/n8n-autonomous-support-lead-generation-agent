@@ -1,0 +1,969 @@
+{
+  "name": "LMS Topic 11 - Autonomous Support & Lead Generation Agent",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "74a6bf14-7fe7-4031-8043-da7c4f041e1b",
+      "name": "DB Setup - Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -624,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- TEMPORARY / ADMIN SETUP NODE for LMS Topic 11. Not connected to the live webhook flow.\n-- 1) Create required tables (idempotent)\nCREATE TABLE IF NOT EXISTS customers (\n    customer_id TEXT PRIMARY KEY,\n    name TEXT,\n    email TEXT,\n    status TEXT,\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\nCREATE TABLE IF NOT EXISTS tickets (\n    ticket_id TEXT PRIMARY KEY,\n    customer_id TEXT,\n    subject TEXT,\n    status TEXT,\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\nCREATE TABLE IF NOT EXISTS accounts (\n    customer_id TEXT PRIMARY KEY,\n    plan TEXT,\n    mrr NUMERIC,\n    account_status TEXT,\n    is_lead BOOLEAN DEFAULT FALSE\n);\n\nCREATE TABLE IF NOT EXISTS orders (\n    order_id TEXT PRIMARY KEY,\n    customer_id TEXT,\n    status TEXT,\n    amount NUMERIC,\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\nCREATE TABLE IF NOT EXISTS token_usage_log (\n    id SERIAL PRIMARY KEY,\n    ticket_id TEXT,\n    customer_id TEXT,\n    execution_id TEXT,\n    model TEXT,\n    input_tokens INTEGER,\n    output_tokens INTEGER,\n    total_tokens INTEGER,\n    status TEXT,\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\n-- 2) Seed idempotent demo/test data (safe to re-run)\nINSERT INTO customers (customer_id, name, email, status)\nVALUES ('CUST-1001', 'Jane Doe', 'jane@example.com', 'active')\nON CONFLICT (customer_id) DO NOTHING;\n\nINSERT INTO accounts (customer_id, plan, mrr, account_status, is_lead)\nVALUES ('CUST-1001', 'Enterprise', 999, 'active', TRUE)\nON CONFLICT (customer_id) DO NOTHING;\n\nINSERT INTO orders (order_id, customer_id, status, amount)\nVALUES ('ORD-1001', 'CUST-1001', 'completed', 999)\nON CONFLICT (order_id) DO NOTHING;\n\n-- Primary test ticket + previous ticket history (for the LIMIT 5 history query)\nINSERT INTO tickets (ticket_id, customer_id, subject, status, created_at) VALUES\n    ('TCK-9001', 'CUST-1001', 'Interested in upgrading to Enterprise plan', 'open', CURRENT_TIMESTAMP),\n    ('TCK-9000', 'CUST-1001', 'Question about invoice for last month', 'closed', CURRENT_TIMESTAMP - INTERVAL '5 days'),\n    ('TCK-8999', 'CUST-1001', 'How do I add more seats to my plan?', 'closed', CURRENT_TIMESTAMP - INTERVAL '12 days'),\n    ('TCK-8998', 'CUST-1001', 'Password reset not working', 'closed', CURRENT_TIMESTAMP - INTERVAL '20 days'),\n    ('TCK-8997', 'CUST-1001', 'Requesting a product demo', 'closed', CURRENT_TIMESTAMP - INTERVAL '30 days'),\n    ('TCK-8996', 'CUST-1001', 'General onboarding questions', 'closed', CURRENT_TIMESTAMP - INTERVAL '45 days')\nON CONFLICT (ticket_id) DO NOTHING;",
+        "options": {}
+      },
+      "id": "8a713cfc-2bb6-47f8-a05a-2d70175b2775",
+      "name": "DB Setup - Create Topic 11 Tables",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -400,
+        -176
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "Nl3FsdXbjJmp3Ep8",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "support-ticket",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "323d4dd4-9ef9-4689-b543-ae467c38d909",
+      "name": "01 - Support Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -624,
+        304
+      ],
+      "webhookId": "c2bc662f-444a-4098-904d-9cb7a83a763a"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "v1",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.body.ticket_id }}",
+              "rightValue": ""
+            },
+            {
+              "id": "v2",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.body.customer_id }}",
+              "rightValue": ""
+            },
+            {
+              "id": "v3",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.body.name }}",
+              "rightValue": ""
+            },
+            {
+              "id": "v4",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.body.email }}",
+              "rightValue": ""
+            },
+            {
+              "id": "v5",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.body.subject }}",
+              "rightValue": ""
+            },
+            {
+              "id": "v6",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.body.message }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a94c284f-d19d-446b-a655-0e3ea9c7fc8a",
+      "name": "02 - Validate Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -400,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "n1",
+              "name": "ticket_id",
+              "type": "string",
+              "value": "={{ $json.body.ticket_id }}"
+            },
+            {
+              "id": "n2",
+              "name": "customer_id",
+              "type": "string",
+              "value": "={{ $json.body.customer_id }}"
+            },
+            {
+              "id": "n3",
+              "name": "name",
+              "type": "string",
+              "value": "={{ $json.body.name }}"
+            },
+            {
+              "id": "n4",
+              "name": "email",
+              "type": "string",
+              "value": "={{ $json.body.email }}"
+            },
+            {
+              "id": "n5",
+              "name": "subject",
+              "type": "string",
+              "value": "={{ $json.body.subject }}"
+            },
+            {
+              "id": "n6",
+              "name": "message",
+              "type": "string",
+              "value": "={{ $json.body.message }}"
+            },
+            {
+              "id": "n7",
+              "name": "priority",
+              "type": "string",
+              "value": "={{ $json.body.priority }}"
+            },
+            {
+              "id": "n8",
+              "name": "request_type",
+              "type": "string",
+              "value": "={{ $json.body.request_type }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2620bd8d-4a21-4155-a76d-6874225552de",
+      "name": "03 - Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -176,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM customers WHERE customer_id = $1 LIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ $json.customer_id }}"
+        }
+      },
+      "id": "0f4d651e-d523-456a-8cba-26e0bad44f59",
+      "name": "04A - Get Customer Profile",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        80,
+        64
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "Nl3FsdXbjJmp3Ep8",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_id, subject, status, created_at FROM tickets WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 5;",
+        "options": {
+          "queryReplacement": "={{ $json.customer_id }}"
+        }
+      },
+      "id": "881bedb0-f915-4a64-967e-3ca937c5b283",
+      "name": "04B - Get Previous Tickets",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        80,
+        240
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "Nl3FsdXbjJmp3Ep8",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT plan, mrr, account_status, is_lead FROM accounts WHERE customer_id = $1 LIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ $json.customer_id }}"
+        }
+      },
+      "id": "6c5e4881-cef2-466d-8f51-39acd949b2d6",
+      "name": "04C - Get Account & Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        80,
+        432
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "Nl3FsdXbjJmp3Ep8",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({\n  success: false,\n  status: \"validation_failed\",\n  message: \"Required fields are missing.\"\n}) }}",
+        "options": {}
+      },
+      "id": "8559cb68-ec3c-47a4-b3a4-e9d9f034514c",
+      "name": "Build Validation Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -176,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "24fb293f-c368-4aba-898e-482461439cca",
+      "name": "Respond Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        48,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "9e06e569-e424-4c9c-ab2a-575952e18f4f",
+      "name": "05 - Merge Context",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        320,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM orders WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 5;",
+        "options": {
+          "queryReplacement": "={{ $json.customer_id }}"
+        }
+      },
+      "id": "9fd21538-3735-452c-ab4a-ca234d961425",
+      "name": "10 - Dynamic DB Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1424,
+        128
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "Nl3FsdXbjJmp3Ep8",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "dd9e50f3-27d0-4f26-84d1-1aab17e6512d",
+      "name": "11 - Merge Routes",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1648,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "r0",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    },
+                    "leftValue": "={{ $json.valid && $json.ai.auto_resolve === true && $json.ai.escalate !== true && $json.ai.lead !== true }}",
+                    "rightValue": ""
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "auto_resolve"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "r1",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    },
+                    "leftValue": "={{ $json.valid && $json.ai.lead === true && $json.ai.escalate !== true }}",
+                    "rightValue": ""
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "lead"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "r2",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    },
+                    "leftValue": "={{ $json.valid && ($json.ai.escalate === true || $json.ai.recommended_action === 'human_escalation' || ($json.ai.auto_resolve !== true && $json.ai.lead !== true)) }}",
+                    "rightValue": ""
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "escalate"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "eff45f9b-d398-4623-a9e7-36d948488e5b",
+      "name": "09 - Decision Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1200,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assemble a single context object for one Gemini call.\nconst t = $('03 - Normalize Input').first().json;\nconst branches = $input.all().map(i => i.json);\n\n// Branch A/B/C arrive appended in order; guard against missing rows.\nconst profile = branches[0] || {};\nconst history = branches.filter(b => b && b.ticket_id).slice(0, 5);\nconst account = branches.find(b => b && (b.plan || b.account_status || b.is_lead !== undefined)) || {};\n\nconst contextText = [\n  '### Customer Profile', JSON.stringify(profile),\n  '### Recent Tickets (max 5)', JSON.stringify(history),\n  '### Account / Order / Lead', JSON.stringify(account),\n].join('\\n');\n\nreturn [{\n  json: {\n    ticket_id: t.ticket_id,\n    customer_id: t.customer_id,\n    name: t.name,\n    email: t.email,\n    subject: t.subject,\n    message: t.message,\n    incoming_priority: t.priority,\n    request_type: t.request_type,\n    context_text: contextText,\n  },\n}];"
+      },
+      "id": "7a036632-82e8-4b02-8bf3-5bbb69e3d335",
+      "name": "06 - Prepare AI Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Ticket ID: {{ $json.ticket_id }}\nRequest type: {{ $json.request_type }}\nReported priority: {{ $json.incoming_priority }}\nCustomer: {{ $json.name }} ({{ $json.email }}) — customer_id {{ $json.customer_id }}\nSubject: {{ $json.subject }}\nMessage: {{ $json.message }}\n\nRetrieved context (authoritative — do not invent beyond this):\n{{ $json.context_text }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are an autonomous customer support and lead-generation agent.\nAnalyze the current ticket together with the retrieved customer context and respond with ONE JSON object matching the required schema. No prose outside the JSON.\n\nDecision rules:\n- category: high-level bucket (SUPPORT, BILLING, ACCOUNT, TECHNICAL, SALES, GENERAL).\n- priority: LOW, MEDIUM, HIGH or URGENT.\n- intent: short snake_case label (e.g. payment_issue, upgrade_request, bug_report).\n- Detect sales/upgrade/purchase interest -> set \"lead\": true and recommended_action \"lead_followup\".\n- Set \"auto_resolve\": true ONLY when the answer is fully supported by the provided context and is low-risk. Then recommended_action \"auto_resolve\".\n- For high-risk, ambiguous, billing/payment, security, or uncertain requests -> set \"escalate\": true and recommended_action \"human_escalation\". Never set auto_resolve in that case.\n- customer_response: concise, professional message to the customer. When escalating, acknowledge and set expectations — NEVER claim the issue is fixed or resolved.\n- internal_summary: 1-2 sentences for the internal team.\n\nStrict grounding — you MUST NOT invent or assume any of the following if it is not present in the retrieved context: customer data, order data, payment status, account information, product information, or company policy. If information is missing, escalate instead of guessing.\nNever include secrets, credentials, internal system details, or raw context dumps in customer_response."
+        }
+      },
+      "id": "5f365998-d978-4158-af92-cd743208e607",
+      "name": "07 - AI Support Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        768,
+        240
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "options": {
+          "maxOutputTokens": 800,
+          "temperature": 0.2
+        }
+      },
+      "id": "43e39162-dded-45c2-a526-09c8c4ee225c",
+      "name": "Gemini 2.5 Flash",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        720,
+        640
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "GyUgk15GB3craAwS",
+          "name": "Google Gemini API account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"category\": { \"type\": \"string\", \"description\": \"High-level category, e.g. SUPPORT, BILLING, ACCOUNT, TECHNICAL, SALES, GENERAL\" },\n    \"priority\": { \"type\": \"string\", \"description\": \"One of: LOW, MEDIUM, HIGH, URGENT\" },\n    \"intent\": { \"type\": \"string\", \"description\": \"Short snake_case intent label, e.g. payment_issue, upgrade_request, bug_report\" },\n    \"recommended_action\": { \"type\": \"string\", \"description\": \"One of: auto_resolve, lead_followup, human_escalation\" },\n    \"auto_resolve\": { \"type\": \"boolean\", \"description\": \"True only if the request can be safely resolved automatically from the provided context\" },\n    \"escalate\": { \"type\": \"boolean\", \"description\": \"True if the request is high-risk or uncertain and needs a human\" },\n    \"customer_response\": { \"type\": \"string\", \"description\": \"Concise, professional reply to send to the customer. Never claim an issue is resolved when escalating.\" },\n    \"internal_summary\": { \"type\": \"string\", \"description\": \"Short summary for the internal support/sales team\" },\n    \"lead\": { \"type\": \"boolean\", \"description\": \"True if the message shows sales/upgrade/purchase intent\" }\n  },\n  \"required\": [\"category\", \"priority\", \"intent\", \"recommended_action\", \"auto_resolve\", \"escalate\", \"customer_response\", \"internal_summary\", \"lead\"],\n  \"additionalProperties\": false\n}"
+      },
+      "id": "c649ce4c-ca53-43f3-9fdf-2a9e7e5f68a3",
+      "name": "AI JSON Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        912,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('06 - Prepare AI Context').first().json;\nconst item = $input.first().json;\nconst raw = item.output || item;\n\nconst required = ['category','priority','intent','recommended_action','auto_resolve','escalate','customer_response','internal_summary','lead'];\nconst valid = raw && typeof raw === 'object' && required.every(k => k in raw);\n\n// Read real Gemini/LangChain usage metadata when the node exposes it. No extra API call. Never fabricate numbers.\nconst usage = item.tokenUsage || item.usage || item.usageMetadata || (item.response_metadata && item.response_metadata.tokenUsage) || {};\nconst inputTokens = usage.promptTokens ?? usage.input_tokens ?? usage.promptTokenCount ?? usage.inputTokens ?? null;\nconst outputTokens = usage.completionTokens ?? usage.output_tokens ?? usage.candidatesTokenCount ?? usage.outputTokens ?? null;\nconst totalTokens = usage.totalTokens ?? usage.total_tokens ?? usage.totalTokenCount ?? ((inputTokens != null && outputTokens != null) ? (inputTokens + outputTokens) : null);\n\nreturn [{\n  json: {\n    valid,\n    ai: valid ? raw : null,\n    ticket_id: ctx.ticket_id,\n    customer_id: ctx.customer_id,\n    name: ctx.name,\n    email: ctx.email,\n    subject: ctx.subject,\n    execution_id: $execution.id,\n    model: 'models/gemini-2.5-flash',\n    input_tokens: inputTokens != null ? inputTokens : '',\n    output_tokens: outputTokens != null ? outputTokens : '',\n    total_tokens: totalTokens != null ? totalTokens : '',\n    timestamp: new Date().toISOString(),\n    status: valid ? 'success' : 'ai_parse_failed',\n  },\n}];"
+      },
+      "id": "16fa0356-70d6-4715-9fa2-4e4c55caf92c",
+      "name": "08 - Parse & Validate AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        992,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({\n  success: true,\n  status: \"fallback\",\n  message: \"Your request has been received and has been forwarded to our support team.\",\n  escalated: true\n}) }}",
+        "options": {}
+      },
+      "id": "23368546-8add-404c-823e-5bc35f39faac",
+      "name": "Build Fallback Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1200,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "e8715300-9620-47c4-bd0d-be518ef72193",
+      "name": "Respond Fallback",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1424,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "shahidshaik3335@gmail.com",
+        "toEmail": "={{ $('08 - Parse & Validate AI').first().json.email }}",
+        "subject": "=Re: {{ $('08 - Parse & Validate AI').first().json.subject }} [{{ $('08 - Parse & Validate AI').first().json.ticket_id }}]",
+        "emailFormat": "text",
+        "text": "=Hi {{ $('08 - Parse & Validate AI').first().json.name }},\n\n{{ $('08 - Parse & Validate AI').first().json.ai.customer_response }}\n\nYour ticket reference is {{ $('08 - Parse & Validate AI').first().json.ticket_id }}.\n\nBest regards,\nCustomer Support Team",
+        "options": {}
+      },
+      "id": "8c33b577-554d-43c1-b234-f924bc4ab390",
+      "name": "12 - Send Customer Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1872,
+        144
+      ],
+      "webhookId": "e9947e42-7087-4f91-ad29-e1c89dd9e6fb",
+      "credentials": {
+        "smtp": {
+          "id": "PDbN25hnSnJyIUyW",
+          "name": "SMTP account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO token_usage_log (ticket_id, customer_id, execution_id, model, input_tokens, output_tokens, total_tokens, status, created_at) VALUES ($1, $2, $3, $4, NULLIF($5, '')::int, NULLIF($6, '')::int, NULLIF($7, '')::int, $8, $9);",
+        "options": {
+          "queryReplacement": "={{ [   $('08 - Parse & Validate AI').first().json.ticket_id,   $('08 - Parse & Validate AI').first().json.customer_id,   $('08 - Parse & Validate AI').first().json.execution_id,   $('08 - Parse & Validate AI').first().json.model,   $('08 - Parse & Validate AI').first().json.input_tokens ?? '',   $('08 - Parse & Validate AI').first().json.output_tokens ?? '',   $('08 - Parse & Validate AI').first().json.total_tokens ?? '',   $('08 - Parse & Validate AI').first().json.status ?? 'success',   $('08 - Parse & Validate AI').first().json.created_at ?? new Date().toISOString() ] }}"
+        }
+      },
+      "id": "3f05ce99-ddd3-4576-90aa-e4231631924f",
+      "name": "14 - Token Usage Logger",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2080,
+        240
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "Nl3FsdXbjJmp3Ep8",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($('08 - Parse & Validate AI').first().json.ai.escalate === true\n  ? { success: true, ticket_id: $('08 - Parse & Validate AI').first().json.ticket_id, status: \"escalated\", action: \"human_review\", escalated: true }\n  : { success: true, ticket_id: $('08 - Parse & Validate AI').first().json.ticket_id, status: \"processed\", action: \"auto_resolved\", escalated: false }) }}",
+        "options": {}
+      },
+      "id": "e6107453-e3c1-4eeb-9c2a-5d128c1c366e",
+      "name": "Build Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2304,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "cdcd4909-9496-4c98-8f81-6553df3f30cf",
+      "name": "16 - Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2528,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#support"
+        },
+        "text": "=🚨 Support / Lead Notification\n\nTicket: {{ $('08 - Parse & Validate AI').first().json.ticket_id }}\nCustomer: {{ $('08 - Parse & Validate AI').first().json.name }}\nEmail: {{ $('08 - Parse & Validate AI').first().json.email }}\nPriority: {{ $('08 - Parse & Validate AI').first().json.ai.priority }}\nCategory: {{ $('08 - Parse & Validate AI').first().json.ai.category }}\n\nSummary:\n{{ $('08 - Parse & Validate AI').first().json.ai.internal_summary }}\n\nAction:\n{{ $('08 - Parse & Validate AI').first().json.ai.recommended_action }}",
+        "otherOptions": {}
+      },
+      "id": "2dea9845-7004-4eca-b698-035f6a13d9bb",
+      "name": "13 - Internal Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1872,
+        320
+      ],
+      "webhookId": "373c81cc-4103-4c82-b0fe-dca39a293e4a",
+      "credentials": {
+        "slackApi": {
+          "id": "VQqWZVPddBQOwiSw",
+          "name": "Slack account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "DB Setup - Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "DB Setup - Create Topic 11 Tables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "01 - Support Webhook": {
+      "main": [
+        [
+          {
+            "node": "02 - Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02 - Validate Input": {
+      "main": [
+        [
+          {
+            "node": "03 - Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "03 - Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "04A - Get Customer Profile",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "04B - Get Previous Tickets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "04C - Get Account & Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04A - Get Customer Profile": {
+      "main": [
+        [
+          {
+            "node": "05 - Merge Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04B - Get Previous Tickets": {
+      "main": [
+        [
+          {
+            "node": "05 - Merge Context",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "04C - Get Account & Lead": {
+      "main": [
+        [
+          {
+            "node": "05 - Merge Context",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Build Validation Error": {
+      "main": [
+        [
+          {
+            "node": "Respond Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "05 - Merge Context": {
+      "main": [
+        [
+          {
+            "node": "06 - Prepare AI Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10 - Dynamic DB Query": {
+      "main": [
+        [
+          {
+            "node": "11 - Merge Routes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11 - Merge Routes": {
+      "main": [
+        [
+          {
+            "node": "12 - Send Customer Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "13 - Internal Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "09 - Decision Router": {
+      "main": [
+        [
+          {
+            "node": "10 - Dynamic DB Query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "11 - Merge Routes",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "11 - Merge Routes",
+            "type": "main",
+            "index": 2
+          }
+        ],
+        [
+          {
+            "node": "Build Fallback Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "06 - Prepare AI Context": {
+      "main": [
+        [
+          {
+            "node": "07 - AI Support Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "07 - AI Support Agent": {
+      "main": [
+        [
+          {
+            "node": "08 - Parse & Validate AI",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Fallback Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini 2.5 Flash": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "07 - AI Support Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI JSON Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "07 - AI Support Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08 - Parse & Validate AI": {
+      "main": [
+        [
+          {
+            "node": "09 - Decision Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Fallback Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12 - Send Customer Email": {
+      "main": [
+        [
+          {
+            "node": "14 - Token Usage Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14 - Token Usage Logger": {
+      "main": [
+        [
+          {
+            "node": "Build Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Success Response": {
+      "main": [
+        [
+          {
+            "node": "16 - Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "d620b5e9-d93d-4b47-8eea-4c7f97cf1a5a",
+  "meta": {
+    "instanceId": "6abe9931809978352319cb21622ffdff38accce530bfc6c488633e9f18461d78"
+  },
+  "nodeGroups": [],
+  "id": "kXq1XvoOrAJK6rBO",
+  "tags": []
+}
