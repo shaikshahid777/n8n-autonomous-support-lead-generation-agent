@@ -1,0 +1,9 @@
+{
+  "ticket_id": "TCK-VALIDATION-001",
+  "customer_id": "CUST-1001",
+  "name": "Shahid",
+  "email": "shahidshaik3335@gmail.com",
+  "subject": "Validation test",
+  "priority": "low",
+  "request_type": "support"
+}
